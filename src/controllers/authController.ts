@@ -86,7 +86,7 @@ export const verifySignupOTP = async (req: Request, res: Response): Promise<void
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
+      sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
@@ -164,7 +164,7 @@ export const verifySigninOTP = async (req: Request, res: Response): Promise<void
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
+      sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
@@ -190,10 +190,24 @@ export const logout = (req: Request, res: Response): void => {
 
 export const getProfile = async (req: Request, res: Response): Promise<void> => {
   try {
-    const token = req.cookies.token || req.headers.authorization?.replace('Bearer ', '');
+    // Get token from cookies first, then from Authorization header
+    let token = req.cookies.token;
     
+    if (!token && req.headers.authorization) {
+      const authHeader = req.headers.authorization;
+      if (authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
+
     if (!token) {
       res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is not defined');
+      res.status(500).json({ error: 'Server configuration error' });
       return;
     }
 
@@ -214,6 +228,7 @@ export const getProfile = async (req: Request, res: Response): Promise<void> => 
       }
     });
   } catch (error) {
+    console.error('Get profile error:', error);
     res.status(401).json({ error: 'Invalid token' });
   }
 };

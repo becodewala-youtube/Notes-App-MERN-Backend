@@ -8,10 +8,24 @@ interface AuthRequest extends Request {
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const token = req.cookies.token || req.headers.authorization?.replace('Bearer ', '');
+    // Get token from cookies first, then from Authorization header
+    let token = req.cookies.token;
+    
+    if (!token && req.headers.authorization) {
+      const authHeader = req.headers.authorization;
+      if (authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
 
     if (!token) {
       res.status(401).json({ error: 'Access token required' });
+      return;
+    }
+
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is not defined in environment variables');
+      res.status(500).json({ error: 'Server configuration error' });
       return;
     }
 
@@ -26,7 +40,14 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     req.user = user;
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Invalid token' });
+    console.error('Auth middleware error:', error);
+    if (error instanceof jwt.JsonWebTokenError) {
+      res.status(401).json({ error: 'Invalid token' });
+    } else if (error instanceof jwt.TokenExpiredError) {
+      res.status(401).json({ error: 'Token expired' });
+    } else {
+      res.status(401).json({ error: 'Authentication failed' });
+    }
   }
 };
 
